@@ -49,5 +49,25 @@ homework runner.
 
 
 ## Homework 1 solution: 
-> to students: please fill your solution description here.
+
+```mermaid
+flowchart TD
+    A[Receipt folder] --> B[Encode each image as base64 data URL]
+    B --> C[Parallel batch: prompt + image to deepseek-v4-flash-vision-exp]
+    C --> D[Parse JSON: items, discounts, rounding, total_paid]
+    D --> E{items - discounts + rounding == total_paid?}
+    E -- yes --> G[Accept extraction]
+    E -- no, up to 2 retries --> F[Reflection: send the mismatch back as feedback]
+    F --> C
+    G --> H[Python Decimal aggregation across receipts]
+    H --> I[Q1: sum of total_paid]
+    H --> J[Q2: sum of total_paid - rounding + discounts]
+```
+
+My chain separates perception from arithmetic. 
+For every receipt, a LangChain runnable (message builder, then ChatDeepSeek with deepseek-v4-flash-vision-exp at temperature 0, then a string parser) transcribes the image into a structured JSON object containing every item line total, every discount line as a positive number, the signed rounding line, and the final amount paid. 
+All receipts are processed in parallel with `batch`. Each extraction is validated with an arithmetic consistency，check (items minus discounts plus rounding must equal the final payment); when the check fails, the concrete mismatch is sent back to the model as feedback for up to two reflection retries, and a majority vote over consistent readings picks the final extraction. 
+The totals are then computed deterministically in Python with `Decimal`:
+Query 1 sums the final payments, and Query 2 sums each payment minus its rounding plus all discounts, which recovers the pre-discount price regardless of whether SUBTOTAL is printed before or after the discount lines. 
+The response for each query contains exactly one HKD amount, for example `HK$1974.30`.
 
